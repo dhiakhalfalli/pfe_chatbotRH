@@ -1,0 +1,55 @@
+# ─── Core Framework ───────────────────────────────────────────────────────────
+fastapi==0.110.0
+uvicorn[standard]==0.27.1
+python-multipart==0.0.9
+pydantic==2.6.3
+pydantic-settings==2.2.1
+
+# ─── LangChain / LangGraph ────────────────────────────────────────────────────
+langchain==0.1.13
+langchain-core==0.1.35
+langchain-community==0.0.29
+langgraph==0.0.37
+
+# ─── LLM Providers (install the one you use) ─────────────────────────────────
+langchain-openai==0.1.1
+langchain-groq==0.1.3
+
+# ─── PDF & OCR ────────────────────────────────────────────────────────────────
+PyMuPDF==1.24.0
+pypdf==4.1.0
+pdfplumber==0.11.0
+easyocr==1.7.1
+Pillow==10.2.0
+
+# ─── NLP ─────────────────────────────────────────────────────────────────────
+spacy==3.7.4
+# After install run: python -m spacy download en_core_web_sm
+
+# ─── HuggingFace ─────────────────────────────────────────────────────────────
+transformers==4.39.2
+sentence-transformers==2.6.1
+torch==2.2.1  # CPU-only: torch==2.2.1+cpu (see pytorch.org)
+
+# ─── Databases ────────────────────────────────────────────────────────────────
+motor==3.3.2          # Async MongoDB
+pymongo==4.6.2
+sqlalchemy==2.0.28
+aiomysql==0.2.0       # Async MySQL (optional)
+
+# ─── Task Queue ───────────────────────────────────────────────────────────────
+celery==5.3.6
+redis==5.0.2
+flower==2.0.1          # Celery monitoring UI
+
+# ─── HTTP & API ───────────────────────────────────────────────────────────────
+requests==2.31.0
+httpx==0.27.0
+aiohttp==3.9.3
+
+# ─── Utilities ────────────────────────────────────────────────────────────────
+python-dotenv==1.0.1
+structlog==24.1.0
+tenacity==8.2.3
+numpy==1.26.4
+pandas==2.2.1
