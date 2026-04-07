@@ -65,9 +65,9 @@ function CandidateProfile({ candidate: summaryCandidate, onClose }) {
     if (!summaryCandidate) return null
 
     return (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '2rem' }}>
+        <div style={{ position: 'fixed', inset: 0, background: 'var(--color-overlay)', backdropFilter: 'blur(4px)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000, padding: '2rem' }}>
             <div className="card" style={{ width: '100%', maxWidth: 900, maxHeight: '90vh', display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
-                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(99,102,241,0.05)' }}>
+                <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--color-surface)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
                         <div style={{ width: 64, height: 64, borderRadius: '50%', background: 'var(--gradient-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white' }}>
                             <User size={32} />
@@ -125,9 +125,9 @@ function CandidateProfile({ candidate: summaryCandidate, onClose }) {
                                     </div>
                                     <div>
                                         <h3 style={{ fontSize: 16, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 8 }}><Award size={18} color="var(--color-primary-light)" /> Key Metrics</h3>
-                                        <div className="card" style={{ padding: '1.5rem', marginBottom: '1rem' }}>
+                                        <div className="card" style={{ padding: '1.5rem', marginBottom: '1rem', background: 'var(--color-bg-primary)' }}>
                                             <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Overall AI Score</div>
-                                            <div style={{ fontSize: 32, fontWeight: 800, color: 'white', display: 'flex', alignItems: 'center', gap: 12 }}>
+                                            <div style={{ fontSize: 32, fontWeight: 800, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 12 }}>
                                                 {Math.round(candidate.score?.total_score || 0)}%
                                                 <span className={`badge ${candidate.score?.total_score > 80 ? 'badge-green' : 'badge-gray'}`} style={{ fontSize: 12 }}>
                                                     {candidate.score?.total_score > 80 ? 'Excellent Fit' : 'Qualified'}
@@ -183,7 +183,7 @@ function CandidateProfile({ candidate: summaryCandidate, onClose }) {
                                     <textarea
                                         className="form-textarea"
                                         placeholder="Add thoughts about the candidate, technical assessment, or cultural fit..."
-                                        style={{ width: '100%', minHeight: 200, background: 'rgba(255,255,255,0.02)', color: 'white' }}
+                                        style={{ width: '100%', minHeight: 200, background: 'var(--color-bg-primary)', color: 'var(--text-primary)' }}
                                         value={notes}
                                         onChange={e => setNotes(e.target.value)}
                                     />
@@ -194,8 +194,8 @@ function CandidateProfile({ candidate: summaryCandidate, onClose }) {
                             )}
                             {activeTab === 'AI Recommendation' && (
                                 <div>
-                                    <div className="card" style={{ padding: '1.5rem', background: 'rgba(99,102,241,0.05)', borderColor: 'rgba(99,102,241,0.3)' }}>
-                                        <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'white' }}>
+                                    <div className="card" style={{ padding: '1.5rem', background: 'var(--color-bg-glass)', borderColor: 'var(--color-border-hover)' }}>
+                                        <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, color: 'var(--text-primary)' }}>
                                             <BrainCircuit size={24} color="var(--color-primary-light)" /> AI Insights
                                         </h3>
                                         <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-primary)' }}>
@@ -269,7 +269,7 @@ export default function CandidateRanking() {
                             {candidates.slice(0, 3).map((c, i) => (
                                 <div className="card" key={c.candidate_id} style={{
                                     borderColor: i === 0 ? 'rgba(245,158,11,0.4)' : 'var(--color-border)',
-                                    background: i === 0 ? 'rgba(245,158,11,0.04)' : 'var(--color-bg-card)',
+                                    background: i === 0 ? 'rgba(245,158,11,0.08)' : 'var(--color-bg-card)',
                                 }}>
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1rem' }}>
                                         <RankBadge rank={i + 1} />

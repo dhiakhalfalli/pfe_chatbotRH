@@ -108,7 +108,7 @@ export default function LeavePortal() {
                     </div>
 
                     {/* Tips */}
-                    <div className="card" style={{ background: 'rgba(99,102,241,0.05)', border: '1px solid rgba(99,102,241,0.15)' }}>
+                    <div className="card" style={{ background: 'var(--color-bg-glass)', border: '1px solid var(--color-border)' }}>
                         <h4 style={{ fontSize: 13, marginBottom: 10, color: 'var(--color-primary-light)' }}>💡 Leave Policy</h4>
                         <ul style={{ fontSize: 13, color: 'var(--text-secondary)', lineHeight: 2, paddingLeft: '1rem' }}>
                             <li>Annual leave must be requested 2 weeks in advance</li>
@@ -152,6 +152,7 @@ export default function LeavePortal() {
                                     className="form-input" type="date"
                                     value={form.end_date}
                                     onChange={e => setForm(f => ({ ...f, end_date: e.target.value }))}
+                                    style={{ background: 'var(--color-bg-primary)' }}
                                     required
                                 />
                             </div>
@@ -181,8 +182,8 @@ export default function LeavePortal() {
                         <div style={{
                             marginTop: '1rem',
                             padding: '1rem',
-                            background: 'rgba(16,185,129,0.08)',
-                            border: '1px solid rgba(16,185,129,0.2)',
+                            background: 'var(--color-surface)',
+                            border: '1px solid var(--color-border)',
                             borderRadius: 10,
                         }}>
                             <pre style={{ fontFamily: 'inherit', fontSize: 13, whiteSpace: 'pre-wrap', color: 'var(--text-primary)' }}>

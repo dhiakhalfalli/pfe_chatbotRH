@@ -116,7 +116,6 @@ export default function ChatbotPopup() {
                     <X size={20} />
                 </button>
             </div>
-
             <div style={{
                 flex: 1,
                 overflowY: 'auto',
@@ -124,7 +123,7 @@ export default function ChatbotPopup() {
                 display: 'flex',
                 flexDirection: 'column',
                 gap: '1rem',
-                backgroundColor: 'rgba(0,0,0,0.2)'
+                backgroundColor: 'var(--color-bg-primary)'
             }}>
                 {messages.map((msg, i) => (
                     <div key={msg.id || i} style={{ alignSelf: msg.role === 'user' ? 'flex-end' : 'flex-start', maxWidth: '85%' }}>
@@ -185,11 +184,11 @@ export default function ChatbotPopup() {
                     placeholder="Ask about Segula rules..."
                     style={{
                         flex: 1,
-                        background: 'rgba(255,255,255,0.05)',
+                        background: 'var(--color-bg-secondary)',
                         border: '1px solid var(--color-border)',
                         borderRadius: 100,
                         padding: '8px 16px',
-                        color: 'white',
+                        color: 'var(--text-primary)',
                         outline: 'none',
                         fontSize: 13
                     }}

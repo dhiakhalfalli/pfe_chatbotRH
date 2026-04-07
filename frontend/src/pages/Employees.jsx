@@ -33,9 +33,9 @@ function CreateEmployeeModal({ onClose }) {
 
     return (
         <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+            position: 'fixed', inset: 0, background: 'var(--color-overlay)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            z: 100, zIndex: 100,
+            zIndex: 1000, backdropFilter: 'blur(4px)',
         }}>
             <div className="card" style={{ width: '100%', maxWidth: 500 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -157,7 +157,7 @@ export default function Employees() {
 
                             {/* Leave Balance */}
                             {emp.leave_balance && (
-                                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'rgba(99,102,241,0.05)', borderRadius: 10, border: '1px solid rgba(99,102,241,0.1)' }}>
+                                <div style={{ marginTop: '1rem', padding: '0.75rem', background: 'var(--color-surface)', borderRadius: 10, border: '1px solid var(--color-border)' }}>
                                     <div style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, marginBottom: 8 }}>LEAVE BALANCE</div>
                                     <div style={{ display: 'flex', gap: '1rem' }}>
                                         {Object.entries(emp.leave_balance).map(([type, days]) => (

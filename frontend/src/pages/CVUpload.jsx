@@ -15,7 +15,7 @@ function ScoreCircle({ score }) {
         <div style={{
             width: 90, height: 90,
             borderRadius: '50%',
-            background: `conic-gradient(${color} ${pct * 3.6}deg, rgba(255,255,255,0.05) 0deg)`,
+            background: `conic-gradient(${color} ${pct * 3.6}deg, var(--color-border) 0deg)`,
             display: 'flex', alignItems: 'center', justifyContent: 'center',
         }}>
             <div style={{
@@ -131,9 +131,9 @@ export default function CVUpload() {
                                     <div key={i} style={{
                                         display: 'flex', alignItems: 'center', gap: 10,
                                         padding: '8px 12px',
-                                        background: 'rgba(99,102,241,0.05)',
+                                        background: 'var(--color-bg-glass)',
                                         borderRadius: 8,
-                                        border: '1px solid rgba(99,102,241,0.1)',
+                                        border: '1px solid var(--color-border)',
                                     }}>
                                         <FileText size={16} color="#6366f1" />
                                         <span style={{ flex: 1, fontSize: 13, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>

@@ -87,8 +87,9 @@ function AddJobModal({ onClose, onAdd }) {
 
     return (
         <div style={{
-            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+            position: 'fixed', inset: 0, background: 'var(--color-overlay)',
             display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+            backdropFilter: 'blur(4px)',
         }}>
             <div className="card" style={{ width: '100%', maxWidth: 520 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
@@ -185,7 +186,7 @@ function JobCard({ job, onRefresh }) {
             )}
 
             <div style={{ marginBottom: '1rem', display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {job.skills.map(s => <span key={s} className="badge badge-gray" style={{ background: 'rgba(255,255,255,0.05)' }}>{s}</span>)}
+                {job.skills.map(s => <span key={s} className="badge badge-gray" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>{s}</span>)}
             </div>
 
             {job.experience && (
@@ -194,7 +195,7 @@ function JobCard({ job, onRefresh }) {
                 </div>
             )}
 
-            <div style={{ padding: '0.75rem', background: 'rgba(0,0,0,0.2)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ padding: '0.75rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
                     <Users size={16} color="var(--color-cyan)" /> {stats.loading ? '...' : stats.matched} Matches
                 </div>
@@ -269,7 +270,7 @@ export default function Jobs() {
             </div>
 
             {totalCandidates === 0 && (
-                <div className="card" style={{ marginBottom: '2rem', background: 'rgba(245,158,11,0.05)', borderColor: 'rgba(245,158,11,0.3)', borderLeftWidth: 4, display: 'flex', alignItems: 'center', gap: 16 }}>
+                <div className="card" style={{ marginBottom: '2rem', background: 'rgba(245,158,11,0.05)', borderColor: 'rgba(245,158,11,0.2)', borderLeft: '4px solid #f59e0b', display: 'flex', alignItems: 'center', gap: 16 }}>
                     <div style={{ fontSize: 24 }}>💡</div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
                         <strong>Aucun candidat dans la base de données.</strong> Allez dans la section <a href="/cv-analysis" style={{ color: 'var(--color-primary-light)', fontWeight: 600 }}>CV Analysis</a> pour télécharger des CVs et voir les correspondances ici.
@@ -278,7 +279,7 @@ export default function Jobs() {
             )}
 
             {/* Filters Area */}
-            <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'rgba(99,102,241,0.03)' }}>
+            <div className="card" style={{ marginBottom: '2rem', padding: '1.5rem', background: 'var(--color-surface)', borderStyle: 'dashed' }}>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: 250, position: 'relative' }}>
                         <Search size={16} style={{ position: 'absolute', left: 12, top: 12, color: 'var(--text-muted)' }} />

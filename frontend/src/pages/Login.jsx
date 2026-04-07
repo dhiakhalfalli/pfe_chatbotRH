@@ -12,12 +12,16 @@ export default function Login({ onLogin }) {
         e.preventDefault()
         setIsLoading(true)
 
-        // Simulate authentication
+        // Simulate authentication with role detection
         setTimeout(() => {
             setIsLoading(false)
-            onLogin(true)
+            let role = 'hr' // default
+            if (email.startsWith('emp')) role = 'employee'
+            if (email.startsWith('ext')) role = 'external'
+            
+            onLogin({ email, role })
             navigate('/')
-        }, 1200)
+        }, 800)
     }
 
     return (
