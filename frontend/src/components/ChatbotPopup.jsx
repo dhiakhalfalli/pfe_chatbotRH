@@ -1,11 +1,16 @@
 import { useState, useRef, useEffect } from 'react'
 import { useMutation } from '@tanstack/react-query'
+import { useLocation } from 'react-router-dom'
 import { hrApi } from '../services/api.js'
 import { MessageSquare, X, Send, Cpu, Zap } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import '../index.css'
 
 export default function ChatbotPopup() {
+    const location = useLocation()
+    const user = JSON.parse(localStorage.getItem('user')) || { role: 'hr' }
+    // Don't show popup when already on the chatbot page
+    if (location.pathname === '/chatbot') return null
     const [isOpen, setIsOpen] = useState(false)
     const [messages, setMessages] = useState([
         {
@@ -27,7 +32,7 @@ export default function ChatbotPopup() {
     const mutation = useMutation({
         // Passing a forced intent implicitly by adding 'Segula question:'
         // But orchestrator handles 'segula' keyword automatically.
-        mutationFn: ({ query }) => hrApi.queryHR(`Segula question: ${query}`, 'emp001', null, 'chat'),
+        mutationFn: ({ query }) => hrApi.queryHR(`Segula question: ${query}`, null, null, 'chat', { role: user.role, email: user.email }),
         onSuccess: (data) => {
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,

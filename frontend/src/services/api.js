@@ -22,19 +22,33 @@ export const hrApi = {
     // ── Stats ─────────────────────────────────────────────────────────────
     getStats: () => api.get('/stats').then(r => r.data),
 
+    // ── Job Offers ────────────────────────────────────────────────────────
+    getJobs: (limit = 50, skip = 0) => api.get('/jobs', { params: { limit, skip } }).then(r => r.data),
+    getJob: (id) => api.get(`/jobs/${id}`).then(r => r.data),
+    createJob: (data) => api.post('/jobs', data).then(r => r.data),
+    evaluateCandidateForJob: (candidateId, jobId) => api.post(`/candidates/${candidateId}/evaluate/${jobId}`).then(r => r.data),
+
     // ── Candidates ────────────────────────────────────────────────────────
     getCandidates: (limit = 50, skip = 0) =>
         api.get('/candidates', { params: { limit, skip } }).then(r => r.data),
     getCandidate: (id) => api.get(`/candidates/${id}`).then(r => r.data),
-    getRanking: (limit = 20, jobTitle = null) =>
-        api.get('/candidate_ranking', { params: { limit, job_title: jobTitle } }).then(r => r.data),
+    updateCandidate: (id, data) => api.patch(`/candidates/${id}`, data).then(r => r.data),
+    getRanking: (limit = 20, jobId = null) =>
+        api.get('/candidate_ranking', { params: { limit, job_id: jobId } }).then(r => r.data),
+    rankAllForJob: (jobId) =>
+        api.post(`/jobs/${jobId}/rank-all`).then(r => r.data),
+    qualityRanking: (limit = 100) =>
+        api.get('/candidates/quality-ranking', { params: { limit } }).then(r => r.data),
+    refreshScores: () =>
+        api.post('/refresh_all_candidate_scores').then(r => r.data),
 
     // ── CV Upload ─────────────────────────────────────────────────────────
-    uploadCV: (file, jobTitle = '', requiredSkills = '') => {
+    uploadCV: (file, uploaderRole = null) => {
         const form = new FormData()
         form.append('file', file)
-        if (jobTitle) form.append('job_title', jobTitle)
-        if (requiredSkills) form.append('required_skills', requiredSkills)
+        if (uploaderRole) {
+            form.append('uploader_role', uploaderRole)
+        }
         return api.post('/upload_cv', form, {
             headers: { 'Content-Type': 'multipart/form-data' },
         }).then(r => r.data)
@@ -74,6 +88,11 @@ export const hrApi = {
 
     // ── Health ────────────────────────────────────────────────────────────
     health: () => api.get('/health').then(r => r.data),
+
+    // ── Copilot ───────────────────────────────────────────────────────────
+    copilotCompare: (c1, c2) => api.post('/copilot/compare', { candidate1_id: c1, candidate2_id: c2 }).then(r => r.data),
+    copilotShortlist: (jobId) => api.post('/copilot/shortlist', { job_id: jobId }).then(r => r.data),
+    copilotExplainRejection: (candidateId, jobTitle) => api.post('/copilot/explain-rejection', { candidate_id: candidateId, job_title: jobTitle }).then(r => r.data),
 }
 
 export default api

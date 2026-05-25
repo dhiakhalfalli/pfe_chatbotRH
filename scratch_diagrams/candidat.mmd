@@ -1,0 +1,19 @@
+%%{init: { 'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'secondaryColor': '#ffffff', 'tertiaryColor': '#ffffff', 'noteBkgColor': '#ffffff', 'noteTextColor': '#000000', 'noteBorderColor': '#000000', 'actorBkg': '#ffffff', 'actorBorder': '#000000', 'actorTextColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000', 'activationBkgColor': '#ffffff', 'activationBorderColor': '#000000' } }}%%
+sequenceDiagram
+    participant C as Candidat
+    participant UI as Interface UI
+    participant G as API Gateway
+    participant A as Agent IA (Analyse)
+    participant DB as MongoDB
+
+    C->>UI: Déposer CV
+    UI->>G: POST /upload_cv
+    G->>A: cv_agent.process_cv()
+    activate A
+    A->>A: Extraction & Scoring
+    A->>DB: Sauvegarder Profil
+    DB-->>A: Confirmation
+    A-->>G: Retourne Score
+    deactivate A
+    G-->>UI: Confirmation & Données
+    UI-->>C: Affiche le Score de Qualité

@@ -1,15 +1,13 @@
 from .cv_agent import CVAgent, cv_agent
 from .interview_agent import InterviewAgent, interview_agent
-from .onboarding_agent import OnboardingAgent, onboarding_agent
-from .training_agent import TrainingAgent, training_agent
-from .payroll_agent import PayrollAgent, payroll_agent
-from .leave_agent import LeaveAgent, leave_agent
+from .privacy_agent import PrivacyAgent, privacy_agent
+from .rh_assistant_agent import RHAssistantAgent, rh_assistant_agent
+from .segula_agent import segula_agent  # RAG agent (base documentaire RH)
 
 __all__ = [
     "CVAgent", "cv_agent",
     "InterviewAgent", "interview_agent",
-    "OnboardingAgent", "onboarding_agent",
-    "TrainingAgent", "training_agent",
-    "PayrollAgent", "payroll_agent",
-    "LeaveAgent", "leave_agent",
+    "PrivacyAgent", "privacy_agent",
+    "RHAssistantAgent", "rh_assistant_agent",
+    "segula_agent",
 ]

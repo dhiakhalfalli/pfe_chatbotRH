@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <style>
+        body { background-color: white; margin: 0; padding: 20px; font-family: sans-serif; }
+        .mermaid { background: white; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #2c3e50;">Diagramme de Séquence : Administrateur RH</h1>
+    <div class="mermaid">
+sequenceDiagram
+    participant Admin as Administrateur RH
+    participant UI as Dashboard UI
+    participant G as API Gateway
+    participant JMS as Job Matcher (LLM)
+    participant DB as MongoDB
+
+    Admin->>UI: Sélectionne Candidat & Offre
+    UI->>G: POST /evaluate_candidate_for_job
+    G->>JMS: evaluate_for_offer(cand_id, job_id)
+    activate JMS
+    JMS->>DB: Récupère Profil & Critères
+    JMS->>JMS: Évaluation LLM-as-a-Judge
+    JMS->>DB: Met à jour le Match Score
+    JMS-->>G: Retourne Justification & Score
+    deactivate JMS
+    G-->>UI: Affiche Rapport de Matching
+    UI-->>Admin: Visualisation complète
+    </div>
+</body>
+</html>

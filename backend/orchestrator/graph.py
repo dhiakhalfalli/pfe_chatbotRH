@@ -1,6 +1,6 @@
 """
-LangGraph Orchestrator: Routes HR requests to specialized agents.
-Implements a state machine graph with intent detection and agent routing.
+LangGraph Orchestrator: Routes les requêtes de recrutement vers les agents spécialisés.
+Architecture recentrée sur le recrutement intelligent avec Privacy Agent intégré.
 """
 import logging
 import re
@@ -10,7 +10,7 @@ import operator
 
 logger = logging.getLogger(__name__)
 
-# ─── LangGraph imports (graceful fallback) ────────────────────────────────────
+# ─── LangGraph (graceful fallback) ───────────────────────────────────────────
 try:
     from langgraph.graph import StateGraph, END
     from langgraph.checkpoint.memory import MemorySaver
@@ -22,17 +22,16 @@ except ImportError:
 
 from backend.agents.cv_agent import cv_agent
 from backend.agents.interview_agent import interview_agent
-from backend.agents.onboarding_agent import onboarding_agent
-from backend.agents.training_agent import training_agent
-from backend.agents.payroll_agent import payroll_agent
-from backend.agents.leave_agent import leave_agent
-from backend.agents.segula_agent import segula_agent
+from backend.agents.privacy_agent import privacy_agent
+from backend.agents.rh_assistant_agent import rh_assistant_agent
+from backend.agents.segula_agent import segula_agent  # RAG / base documentaire
+from backend.services.llm_service import generate_response
+from backend.services.embedding_service import embedding_service
 
 
-# ─── State definition ─────────────────────────────────────────────────────────
+# ─── State ────────────────────────────────────────────────────────────────────
 
 class HRState(TypedDict):
-    """State passed between nodes in the LangGraph workflow."""
     query: str
     intent: str
     agent_called: str
@@ -44,58 +43,74 @@ class HRState(TypedDict):
     error: Optional[str]
 
 
-# ─── Intent patterns ──────────────────────────────────────────────────────────
+# ─── Intent patterns (recrutement + privacy) ──────────────────────────────────
 
 INTENT_PATTERNS: Dict[str, List[str]] = {
     "analyse_cv": [
-        r"analys[ei] cv", r"process cv", r"score candidate",
-        r"upload cv", r"cv analysis", r"parse cv", r"evaluate (cv|resume)",
-        r"analyse (cv|resume)", r"check (cv|resume)", r"profile", r"skills",
-        r"details", r"about (this |the )?candidate", r"who is (he|she)",
-        r"comp[ée]tences", r"d[ée]tails", r"profil", r"qui est", r"son parcours",
+        "Please analyze this candidate's CV and profile",
+        "What are the skills of this candidate?",
+        "Can you score this candidate?",
+        "Tell me about this candidate's background and experience",
+        "Fais-moi un résumé de l'expérience de ce candidat",
+        "Quelles sont les compétences de ce profil ?",
+        "Résume ce candidat",
+        "Analyse ce CV",
     ],
     "plan_interview": [
-        r"interview question", r"schedule interview", r"plan interview",
-        r"interview plan", r"interview candidate", r"generate question",
-        r"interview prep", r"technical question",
-    ],
-    "employee_onboarding": [
-        r"onboard", r"new hire", r"welcome (employee|new|hire)",
-        r"onboarding plan", r"new employee", r"first day",
-        r"employee setup", r"checklist for",
+        "Generate interview questions for this position",
+        "Prepare a technical interview plan",
+        "What questions should I ask this candidate?",
+        "Prépare des questions d'entretien",
+        "Génère des questions pour un développeur",
+        "Questions techniques pour ce poste",
+        "Entretien pour ce candidat",
     ],
     "find_candidates": [
-        r"find candidate", r"looking for candidate", r"search candidate",
-        r"match cv", r"suitable profile", r"hire", r"matching between",
-        r"how to match", r"matching logic", r"candidate for", r"profiles for", 
-        r"who (can|should) we hire",
+        "Find candidates suitable for this job profile",
+        "Match CVs to the job description",
+        "Who should we hire for this position?",
+        "Trouve-moi des candidats pour ce poste",
+        "Classement des candidats",
+        "Meilleurs candidats pour l'offre",
+        "Comparer les profils",
     ],
-    "training_recommendation": [
-        r"train", r"learning", r"course", r"skill gap", r"upskill",
-        r"recommend training", r"development plan", r"improve skill",
-        r"what (course|training)", r"learn",
+    "privacy_request": [
+        "Supprimer mes données personnelles",
+        "Je veux effacer mes informations",
+        "Consentement pour l'utilisation de mes données",
+        "RGPD droits sur mes données",
+        "Anonymiser mon profil",
+        "Comment mes données sont utilisées ?",
+        "Retirer mon consentement",
+        "Delete my personal data",
+        "Privacy data consent",
     ],
-    "payroll_question": [
-        r"salary", r"payslip", r"pay slip", r"payroll", r"deduction",
-        r"net (salary|pay|income)", r"tax", r"bonus", r"compensation",
-        r"how much (do i|am i|will i)", r"take home", r"401k",
+    "rh_assistant": [
+        "Résumé des candidatures pour ce poste",
+        "Quels sont les meilleurs candidats ?",
+        "Aide-moi à choisir un candidat",
+        "Prochaines étapes pour ce recrutement",
+        "Statistiques des candidatures",
+        "Que faire avec ce candidat ?",
+        "Recommande-moi un candidat",
+        "Analyse du pipeline de recrutement",
     ],
-    "leave_request": [
-        r"leave", r"vacation", r"time off", r"annual leave", r"sick leave",
-        r"leave balance", r"days off", r"holiday", r"absent",
-        r"request (leave|time|vacation)", r"submit leave",
+    "rag_hr": [
+        "Quelle est la politique de recrutement ?",
+        "Processus de recrutement de l'entreprise",
+        "Questions sur l'entreprise et les offres",
+        "What are the HR policies?",
+        "Tell me about the company",
+        "Informations sur le processus de candidature",
+        "Comment postuler ?",
     ],
-    "segula_general": [
-        r"segula", r"company policy", r"hr policy", r"general question",
-        r"values", r"benefits", r"culture", r"who are we", r"about segula"
-    ]
 }
 
 
 class HROrchestrator:
     """
-    Central orchestrator that detects intent and routes to specialized agents.
-    Uses LangGraph when available, falls back to simple routing.
+    Orchestrateur central – détecte l'intention et route vers l'agent approprié.
+    Architecture multi-agents orientée recrutement intelligent.
     """
 
     def __init__(self):
@@ -104,22 +119,19 @@ class HROrchestrator:
             self._build_graph()
 
     def _build_graph(self) -> None:
-        """Build the LangGraph state machine."""
         graph = StateGraph(HRState)
 
-        # ── Nodes ──────────────────────────────────────────────────────────────
-        graph.add_node("detect_intent", self._detect_intent_node)
-        graph.add_node("cv_agent", self._cv_node)
-        graph.add_node("interview_agent", self._interview_node)
-        graph.add_node("onboarding_agent", self._onboarding_node)
-        graph.add_node("training_agent", self._training_node)
-        graph.add_node("payroll_agent", self._payroll_node)
-        graph.add_node("leave_agent", self._leave_node)
-        graph.add_node("recruitment_agent", self._recruitment_node)
-        graph.add_node("segula_agent", self._segula_node)
-        graph.add_node("fallback", self._fallback_node)
+        # ── Nœuds ─────────────────────────────────────────────────────────────
+        graph.add_node("detect_intent",    self._detect_intent_node)
+        graph.add_node("cv_agent",         self._cv_node)
+        graph.add_node("interview_agent",  self._interview_node)
+        graph.add_node("matching_agent",   self._matching_node)
+        graph.add_node("privacy_agent",    self._privacy_node)
+        graph.add_node("rh_assistant",     self._rh_assistant_node)
+        graph.add_node("rag_agent",        self._rag_node)
+        graph.add_node("external_agent",   self._external_node)
+        graph.add_node("fallback",         self._fallback_node)
 
-        # ── Entry point ────────────────────────────────────────────────────────
         graph.set_entry_point("detect_intent")
 
         # ── Routing ────────────────────────────────────────────────────────────
@@ -127,218 +139,440 @@ class HROrchestrator:
             "detect_intent",
             self._route,
             {
-                "analyse_cv": "cv_agent",
-                "plan_interview": "interview_agent",
-                "employee_onboarding": "onboarding_agent",
-                "training_recommendation": "training_agent",
-                "payroll_question": "payroll_agent",
-                "leave_request": "leave_agent",
-                "find_candidates": "recruitment_agent",
-                "segula_general": "segula_agent",
-                "unknown": "fallback",
+                "analyse_cv":      "cv_agent",
+                "plan_interview":  "interview_agent",
+                "find_candidates": "matching_agent",
+                "privacy_request": "privacy_agent",
+                "rh_assistant":    "rh_assistant",
+                "rag_hr":          "rag_agent",
+                "unknown":         "fallback",
             },
         )
 
-        # ── Terminal edges ─────────────────────────────────────────────────────
-        for node in ["cv_agent", "interview_agent", "onboarding_agent",
-                     "training_agent", "payroll_agent", "leave_agent", 
-                     "recruitment_agent", "segula_agent", "fallback"]:
+        for node in ["cv_agent", "interview_agent", "matching_agent",
+                     "privacy_agent", "rh_assistant", "rag_agent", "external_agent", "fallback"]:
             graph.add_edge(node, END)
 
         memory = MemorySaver()
         self._graph = graph.compile(checkpointer=memory)
-        logger.info("LangGraph orchestrator compiled successfully")
+        logger.info("LangGraph orchestrator compiled – 6 recruitment agents ready")
 
-    # ─── Node implementations ─────────────────────────────────────────────────
+    # ─── Nœud : détection d'intention ────────────────────────────────────────
 
     def _detect_intent_node(self, state: HRState) -> HRState:
-        """Detect the user's intent from their query."""
         intent = self.detect_intent(state["query"])
         state["intent"] = intent
-        state["messages"].append({
-            "role": "system",
-            "content": f"Intent detected: {intent}",
-        })
+        state["messages"].append({"role": "system", "content": f"Intent: {intent}"})
         return state
 
     def _route(self, state: HRState) -> str:
-        """Route to the appropriate agent based on detected intent."""
-        return state.get("intent", "unknown")
+        role = state.get("metadata", {}).get("role", "hr")
+        intent = state.get("intent", "unknown")
+        
+        if role == "external":
+            if intent == "privacy_request":
+                return "privacy_agent"
+            return "external_agent"
+            
+        return intent
+
+    # ─── Nœud : CV Agent ─────────────────────────────────────────────────────
 
     async def _cv_node(self, state: HRState) -> HRState:
         state["agent_called"] = "cv_agent"
         candidate_id = state.get("candidate_id")
-        logger.info(f"CV Node called for candidate_id: {candidate_id}")
-        
+
         if candidate_id:
             from backend.database.mongo import MongoDB
             candidate = await MongoDB.get_candidate(candidate_id)
             if candidate:
-                logger.info(f"Found candidate: {candidate.get('full_name')}")
                 skills = [s["name"] if isinstance(s, dict) else s for s in candidate.get("skills", [])]
                 score = candidate.get("score", {}).get("total_score", 0)
-                
-                response = (
-                    f"### 📄 Candidate Profile: **{candidate.get('full_name')}**\n\n"
-                    f"**AI Fit Score:** {score}%\n"
-                    f"**Applied For:** {candidate.get('job_title_applied', 'N/A')}\n\n"
-                    f"**Top Skills:** {', '.join(skills[:8])}\n\n"
-                    f"**Summary:** {candidate.get('summary', 'No summary available.')}\n\n"
-                    f"**Experience:** {candidate.get('years_experience', 0)} years total.\n\n"
-                    "Would you like me to generate interview questions for this candidate or recommend some training programs?"
+                role = state.get("metadata", {}).get("role", "hr")
+
+                # Anonymiser si mode candidat
+                display_name = candidate.get("full_name", "N/A")
+                if role == "external":
+                    display_name = "Votre profil"
+
+                candidate_context = (
+                    f"Name: {display_name}\n"
+                    f"AI Fit Score: {score}%\n"
+                    f"Applied For: {candidate.get('job_title_applied', 'N/A')}\n"
+                    f"Skills: {', '.join(skills)}\n"
+                    f"Experience: {candidate.get('years_experience', 0)} years\n"
+                    f"Summary: {candidate.get('summary', 'N/A')}"
                 )
-                state["result"] = {"response": response, "candidate": candidate}
+
+                llm_response = generate_response(
+                    system_prompt=(
+                        f"Tu es un assistant RH expert. Rôle utilisateur: '{role}'. "
+                        f"Réponds en markdown de façon professionnelle.\n\n"
+                        f"--- PROFIL CANDIDAT ---\n{candidate_context}"
+                    ),
+                    user_prompt=state.get("query", "Résume ce candidat"),
+                )
+
+                state["result"] = {
+                    "response": llm_response or (
+                        f"### 📄 Profil: **{display_name}**\n\n"
+                        f"**Score IA:** {score}%\n"
+                        f"**Poste visé:** {candidate.get('job_title_applied', 'N/A')}\n"
+                        f"**Compétences:** {', '.join(skills[:8])}\n"
+                        f"**Expérience:** {candidate.get('years_experience', 0)} ans"
+                    ),
+                    "candidate": candidate,
+                }
                 return state
-            else:
-                logger.warning(f"Candidate not found in DB: {candidate_id}")
 
         state["result"] = {
-            "agent": "cv_agent",
-            "message": "CV processing requires file upload via /upload_cv endpoint, or select a candidate first.",
-            "status": "redirect",
-        }
-        return state
-
-    def _interview_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "interview_agent"
-        candidate_id = state.get("candidate_id", "demo")
-        meta = state.get("metadata", {})
-        result = interview_agent.generate_questions(
-            candidate_id=candidate_id,
-            skills=meta.get("skills", ["python", "machine learning"]),
-            job_title=meta.get("job_title", "Software Engineer"),
-            experience_years=meta.get("experience_years", 3),
-            num_questions=meta.get("num_questions", 8),
-        )
-        state["result"] = result
-        return state
-
-    def _onboarding_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "onboarding_agent"
-        meta = state.get("metadata", {})
-        result = onboarding_agent.create_onboarding_plan(
-            employee_id=state.get("employee_id", "emp001"),
-            employee_name=meta.get("employee_name", "New Employee"),
-            department=meta.get("department", "Engineering"),
-            job_title=meta.get("job_title", "Software Engineer"),
-            start_date=date.today(),
-            manager_name=meta.get("manager_name"),
-        )
-        state["result"] = result
-        return state
-
-    def _training_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "training_agent"
-        meta = state.get("metadata", {})
-        employee_id = state.get("employee_id", "emp001")
-        result = training_agent.analyze_and_recommend(
-            employee_id=employee_id,
-            current_skills=meta.get("skills", []),
-            job_title=meta.get("job_title", ""),
-            required_skills=meta.get("required_skills"),
-            career_goal=meta.get("career_goal"),
-        )
-        state["result"] = result
-        return state
-
-    def _payroll_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "payroll_agent"
-        result = payroll_agent.answer_question(
-            question=state["query"],
-            employee_id=state.get("employee_id"),
-        )
-        state["result"] = result
-        return state
-
-    def _leave_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "leave_agent"
-        meta = state.get("metadata", {})
-        query = state["query"].lower()
-
-        # Determine action
-        if any(kw in query for kw in ["submit", "request", "apply", "take"]):
-            action = "submit"
-        elif any(kw in query for kw in ["balance", "how many", "remaining", "left"]):
-            action = "check_balance"
-        elif any(kw in query for kw in ["history", "list", "previous"]):
-            action = "list"
-        else:
-            action = "summary"
-
-        result = leave_agent.handle_request(
-            action=action,
-            employee_id=state.get("employee_id", "emp001"),
-            leave_type=meta.get("leave_type"),
-            start_date=meta.get("start_date"),
-            end_date=meta.get("end_date"),
-            reason=meta.get("reason"),
-        )
-        state["result"] = result
-        return state
-
-    def _recruitment_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "recruitment_agent"
-        state["result"] = {
-            "finding_candidates": True,
             "response": (
-                "### 🔍 AI Candidate-Job Matching\n\n"
-                "Our platform uses a multi-agent system to match candidates with job offers:\n\n"
-                "1. **CV Processing**: The **CV Agent** extracts technical skills and experience levels from uploaded files.\n"
-                "2. **Requirement Alignment**: Candidates are scored against the specific requirements of each job position.\n"
-                "3. **Ranking**: You can see the results in the **Candidate Ranking** page, where candidates are sorted by their AI fit score.\n\n"
-                "**How to use it:**\n"
-                "• Go to the **Job Positions** page.\n"
-                "• Click on **'View Candidates'** on any job card to see only the candidates matched for that specific role.\n"
-                "• Or go directly to **Candidate Ranking** to see all candidates across all positions."
+                "📄 **Analyse de CV**\n\nPour analyser un CV, utilisez l'endpoint "
+                "`/upload_cv` ou sélectionnez un candidat depuis la liste."
             )
         }
         return state
 
-    def _segula_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "segula_agent"
-        # Since this is an external user prompt forced through the explicit intent flag, 
-        # let's extract query and ask the ollama LLM directly:
+    # ─── Nœud : Interview Agent ───────────────────────────────────────────────
+
+    async def _interview_node(self, state: HRState) -> HRState:
+        state["agent_called"] = "interview_agent"
+        meta = state.get("metadata", {})
+        query = state.get("query", "")
+        skills, job_title, experience_years = meta.get("skills", []), meta.get("job_title", ""), meta.get("experience_years", 0)
+        candidate_name, candidate_summary = "", ""
+
+        if not job_title:
+            job_title = self._extract_job_title_from_query(query)
+
+        candidate_id = state.get("candidate_id")
+        if candidate_id:
+            try:
+                from backend.database.mongo import MongoDB
+                candidate = await MongoDB.get_candidate(candidate_id)
+                if candidate:
+                    candidate_name = candidate.get("full_name", "")
+                    candidate_summary = candidate.get("summary", "")
+                    if not skills:
+                        skills = [s["name"] if isinstance(s, dict) else s for s in candidate.get("skills", [])]
+                    if not job_title:
+                        job_title = candidate.get("job_title_applied", "Software Engineer")
+                    if not experience_years:
+                        experience_years = candidate.get("years_experience", 0)
+            except Exception as e:
+                logger.error(f"Failed to fetch candidate for interview: {e}")
+
+        if not job_title:
+            job_title = "Software Engineer"
+
+        result = interview_agent.generate_questions(
+            candidate_id=candidate_id or "general",
+            skills=skills,
+            job_title=job_title,
+            experience_years=experience_years,
+            num_questions=meta.get("num_questions", 8),
+            candidate_name=candidate_name,
+            candidate_summary=candidate_summary,
+        )
+        state["result"] = result
+        return state
+
+    # ─── Nœud : Matching Agent ────────────────────────────────────────────────
+
+    def _matching_node(self, state: HRState) -> HRState:
+        state["agent_called"] = "matching_agent"
+        state["result"] = {
+            "response": (
+                "### 🎯 Matching Candidats – Offres\n\n"
+                "Notre système multi-agents classe automatiquement les candidats "
+                "selon leur compatibilité avec chaque offre :\n\n"
+                "1. **CV Agent** – Extraction intelligente des compétences\n"
+                "2. **Matching Agent** – Score de compatibilité candidat/offre\n"
+                "3. **Privacy Agent** – Anonymisation des données avant analyse\n\n"
+                "**Accéder aux résultats :**\n"
+                "- Page **Candidats** → classement global\n"
+                "- Page **Offres** → *'Voir les candidats'* pour une offre spécifique\n"
+                "- **API** : `POST /jobs/{job_id}/rank-all`"
+            )
+        }
+        return state
+
+    # ─── Nœud : Privacy Agent ─────────────────────────────────────────────────
+
+    async def _privacy_node(self, state: HRState) -> HRState:
+        state["agent_called"] = "privacy_agent"
+        query = state.get("query", "")
+        candidate_id = state.get("candidate_id")
+
+        # Demande de suppression explicite
+        if any(w in query.lower() for w in ["supprimer", "effacer", "delete", "oubli"]):
+            if candidate_id:
+                result = await privacy_agent.delete_sensitive_data(candidate_id)
+                state["result"] = {
+                    "response": (
+                        f"### 🗑️ Données supprimées\n\n"
+                        f"Les données personnelles du candidat `{candidate_id}` ont été "
+                        f"anonymisées conformément au **RGPD (Art. 17)**.\n\n"
+                        f"**Champs supprimés :** Nom, email, téléphone, adresse, photo\n"
+                        f"**Conservés :** Compétences, score, expérience agrégée"
+                    )
+                }
+                return state
+
+        # Réponse générale sur la privacy
+        result = privacy_agent.answer_privacy_question(query)
+        state["result"] = result
+        return state
+
+    # ─── Nœud : RH Assistant ─────────────────────────────────────────────────
+
+    async def _rh_assistant_node(self, state: HRState) -> HRState:
+        state["agent_called"] = "rh_assistant"
+        query = state.get("query", "")
+        candidate_id = state.get("candidate_id")
+        meta = state.get("metadata", {})
+
+        context = {}
+        if candidate_id:
+            try:
+                from backend.database.mongo import MongoDB
+                candidate = await MongoDB.get_candidate(candidate_id)
+                if candidate:
+                    context["candidate"] = candidate
+            except Exception as e:
+                logger.error(f"Failed to fetch candidate for rh_assistant: {e}")
+
+        result = rh_assistant_agent.answer(query, context=context)
+        state["result"] = result
+        return state
+
+    # ─── Nœud : RAG Agent (base documentaire) ────────────────────────────────
+
+    def _rag_node(self, state: HRState) -> HRState:
+        state["agent_called"] = "rag_agent"
         result = segula_agent.answer_general(state["query"])
         state["result"] = result
         return state
 
-    def _fallback_node(self, state: HRState) -> HRState:
-        state["agent_called"] = "fallback"
-        state["result"] = {
-            "response": (
-                "👋 **Hello! I'm your HR Assistant.**\n\n"
-                "I can help you with:\n"
-                "• 📄 **CV Analysis** – Upload and score candidate CVs\n"
-                "• 🎤 **Interview Planning** – Generate interview questions\n"
-                "• 🚀 **Employee Onboarding** – Create onboarding plans\n"
-                "• 📚 **Training** – Recommend learning programs\n"
-                "• 💰 **Payroll** – Answer salary and payment questions\n"
-                "• 🏖️ **Leave Management** – Check balance, submit requests\n\n"
-                "Try asking: *'What is my leave balance?'* or *'Generate interview questions for a Python developer'*"
-            ),
-        }
+    # ─── Nœud : External Agent (Candidat) ────────────────────────────────────
+
+    async def _external_node(self, state: HRState) -> HRState:
+        state["agent_called"] = "external_agent"
+        query = state.get("query", "")
+        meta = state.get("metadata", {})
+        email = meta.get("email")
+        
+        candidate = None
+        if email:
+            from backend.database.mongo import MongoDB
+            col = MongoDB.get_collection("candidates")
+            candidate = await col.find_one({"email": email})
+        
+        candidate_context = ""
+        if candidate:
+            status_map = {
+                "pending": "En attente d'examen RH (CV bien reçu)",
+                "shortlisted": "Shortlisté 🎉 (Un recruteur va vous contacter pour un entretien)",
+                "rejected": "Non retenu pour le moment (Profil conservé pour de futures opportunités)",
+                "review": "En cours d'évaluation par l'équipe de recrutement"
+            }
+            c_status = status_map.get(candidate.get("status", "pending"), "Inconnu")
+            skills = [s["name"] if isinstance(s, dict) else s for s in candidate.get("skills", [])]
+            
+            candidate_context = (
+                f"\n--- PROFIL DU CANDIDAT ACTUEL ---\n"
+                f"Statut actuel de la candidature: {c_status}\n"
+                f"Compétences extraites du CV: {', '.join(skills)}\n"
+                f"Expérience: {candidate.get('years_experience', 0)} ans\n"
+                f"Poste visé: {candidate.get('job_title_applied', 'N/A')}\n"
+            )
+        else:
+            candidate_context = "\n--- PROFIL DU CANDIDAT ---\nAucun CV n'a été déposé ou associé à cet email. Le candidat doit d'abord uploader un CV pour le suivi ou le matching.\n"
+
+        jobs_context = ""
+        try:
+            from backend.database.mongo import MongoDB
+            jobs = await MongoDB.list_job_offers()
+            jobs_list = []
+            for j in jobs:
+                j_skills = ", ".join(j.get("criteria", {}).get("must_have_skills", []))
+                jobs_list.append(f"- {j.get('title')} (Compétences: {j_skills})")
+            jobs_context = "\n--- OFFRES D'EMPLOI ACTUELLES ---\n" + "\n".join(jobs_list)
+        except Exception as e:
+            logger.warning(f"Failed to fetch jobs for external agent: {e}")
+
+        system_prompt = (
+            "Tu es l'Assistant Virtuel et Ambassadeur Marque Employeur de Segula Technologies, dédié exclusivement aux candidats.\n"
+            "Tu dois répondre aux requêtes de manière bienveillante, chaleureuse et très professionnelle.\n\n"
+            "🚀 **TES 4 MISSIONS PRINCIPALES :**\n"
+            "1. **Coach d'Entretien (Interview Prep)** : Si le candidat te demande de le préparer pour un poste (ex: 'Prépare-moi pour un poste de Dev Python'), "
+            "tu DOIS te transformer en coach technique. Pose-lui 3 questions techniques précises (typiques de Segula) et donne 2 conseils comportementaux.\n"
+            "2. **Orientation / Matching inversé** : Si le candidat demande 'Quelles offres me correspondent ?', analyse ses compétences et "
+            "donne le Top 3 des offres actuelles les plus adaptées en justifiant ton choix. S'il n'a pas déposé de CV, dis-lui de le faire.\n"
+            "3. **Suivi de candidature** : S'il demande 'Où en est ma candidature ?', donne-lui son statut exact avec bienveillance.\n"
+            "4. **FAQ Entreprise & Culture** : Agis comme ambassadeur. Segula Technologies propose généralement : jusqu'à 3 jours de télétravail/semaine, "
+            "des tickets restaurant, une mutuelle avantageuse, et un processus de recrutement en 3 étapes (Appel RH, Test Technique, Entretien Manager).\n\n"
+            f"{candidate_context}\n"
+            f"{jobs_context}\n\n"
+            "⚠️ **RÈGLES STRICTES :**\n"
+            "- Utilise un formatage markdown riche (titres, listes à puces, mots en gras, emojis 🎯✨💡).\n"
+            "- Ne donne jamais d'informations sur les notes internes, les recruteurs ou les autres candidats.\n"
+            "- Sois concis mais percutant."
+        )
+
+        try:
+            llm_response = generate_response(system_prompt=system_prompt, user_prompt=query)
+        except Exception as e:
+            logger.error(f"External agent LLM error: {e}")
+            llm_response = None
+
+        if not llm_response:
+            llm_response = (
+                "👋 **Bonjour ! Je suis votre assistant recrutement Segula Technologies.**\n\n"
+                "Je peux vous aider à :\n"
+                "- 📄 **Analyser votre CV** – Obtenez un score et des recommandations\n"
+                "- 🎤 **Préparer votre entretien** – Questions personnalisées\n"
+                "- 📋 **Suivre votre candidature** – Statut et prochaines étapes\n"
+                "- 🔒 **Gérer vos données** – Consentement et suppression RGPD\n\n"
+                "*Essayez : 'Analyse mon profil' ou 'Prépare-moi pour un entretien Python'*"
+            )
+            
+        state["result"] = {"response": llm_response}
         return state
 
-    # ─── Public API ───────────────────────────────────────────────────────────
+    # ─── Nœud : Fallback ──────────────────────────────────────────────────────
+
+    async def _fallback_node(self, state: HRState) -> HRState:
+        state["agent_called"] = "fallback"
+        query = state.get("query", "")
+        role = state.get("metadata", {}).get("role", "hr")
+        candidate_id = state.get("candidate_id")
+
+        candidate_context = ""
+        if candidate_id:
+            try:
+                from backend.database.mongo import MongoDB
+                candidate = await MongoDB.get_candidate(candidate_id)
+                if candidate:
+                    skills = [s["name"] if isinstance(s, dict) else s for s in candidate.get("skills", [])]
+                    score = candidate.get("score", {}).get("total_score", 0)
+                    candidate_context = (
+                        f"\n\n--- CANDIDAT SÉLECTIONNÉ ---\n"
+                        f"Score IA: {score}% | Poste: {candidate.get('job_title_applied', 'N/A')}\n"
+                        f"Compétences: {', '.join(skills)}\n"
+                        f"Expérience: {candidate.get('years_experience', 0)} ans\n"
+                        f"Résumé: {candidate.get('summary', 'N/A')}"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to fetch candidate context: {e}")
+
+        system_prompt = (
+            "Tu es un assistant RH expert pour une plateforme de recrutement intelligente. "
+            f"Rôle utilisateur: '{role}'. "
+        )
+        if role == "external":
+            system_prompt += (
+                "L'utilisateur est un CANDIDAT. Aide-le avec sa candidature, "
+                "la préparation d'entretien et le suivi de sa candidature. "
+                "Ne divulgue pas d'informations sur les autres candidats. "
+            )
+        else:
+            system_prompt += (
+                "L'utilisateur est un RECRUTEUR RH. Il peut accéder aux données "
+                "des candidats, aux offres et aux statistiques. "
+            )
+        system_prompt += (
+            "Réponds en markdown de façon professionnelle et concise (max 4 paragraphes)."
+            + candidate_context
+        )
+
+        if query.strip():
+            llm_response = generate_response(system_prompt=system_prompt, user_prompt=query)
+            if llm_response:
+                state["result"] = {"response": llm_response}
+                return state
+
+        # Fallback statique
+        if role == "external":
+            state["result"] = {
+                "response": (
+                    "👋 **Bonjour ! Je suis votre assistant recrutement.**\n\n"
+                    "Je peux vous aider à :\n"
+                    "- 📄 **Analyser votre CV** – Obtenez un score et des recommandations\n"
+                    "- 🎤 **Préparer votre entretien** – Questions personnalisées\n"
+                    "- 📋 **Suivre votre candidature** – Statut et prochaines étapes\n"
+                    "- 🔒 **Gérer vos données** – Consentement et suppression RGPD\n\n"
+                    "*Essayez : 'Analyse mon profil' ou 'Prépare-moi pour un entretien Python'*"
+                )
+            }
+        else:
+            state["result"] = {
+                "response": (
+                    "👋 **Assistant RH – Recrutement Intelligent**\n\n"
+                    "Je peux vous aider avec :\n"
+                    "- 📄 **Analyse CV** – Score et résumé automatique\n"
+                    "- 🎯 **Matching** – Compatibilité candidat/offre\n"
+                    "- 🎤 **Entretien** – Génération de questions techniques\n"
+                    "- 📊 **Statistiques** – Pipeline de recrutement\n"
+                    "- 🔒 **Privacy** – Gestion RGPD des candidatures\n\n"
+                    "*Essayez : 'Résume les candidatures pour le poste Python'*"
+                )
+            }
+        return state
+
+    # ─── Helpers ──────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _extract_job_title_from_query(query: str) -> str:
+        q = query.strip()
+        patterns = [
+            r"(?:for\s+(?:a|an|the)\s+)(.+?)(?:\s+position|\s+role|\s+interview|\s*$)",
+            r"(?:for\s+)(.+?)(?:\s+position|\s+role|\s+interview|\s*$)",
+            r"^(?:generate\s+|prepare\s+|create\s+)?(.+?)\s+interview\s+question",
+            r"interview\s+(?:question|prep).*?(?:for|about)\s+(?:a\s+|an\s+|the\s+)?(.+?)$",
+            r"questions?\s+(?:pour|de|d')\s+(?:un\s+|une\s+)?(.+?)$",
+        ]
+        for pat in patterns:
+            m = re.search(pat, q, re.IGNORECASE)
+            if m:
+                title = m.group(1).strip().strip("?.,!")
+                if len(title) > 1 and title.lower() not in {"me", "this", "the", "a"}:
+                    return title
+        return ""
+
+    # ─── Détection d'intention (Semantic Router) ──────────────────────────────
 
     def detect_intent(self, query: str) -> str:
-        """Detect intent from a user query string."""
-        query_lower = query.lower().strip()
+        if not query.strip():
+            return "unknown"
 
         best_intent = "unknown"
-        best_score = 0
+        best_score = 0.0
 
-        for intent, patterns in INTENT_PATTERNS.items():
-            score = 0
-            for pattern in patterns:
-                if re.search(pattern, query_lower):
-                    score += 1
-            if score > best_score:
-                best_score = score
+        if not hasattr(embedding_service, "ready") or not embedding_service.ready:
+            query_lower = query.lower()
+            for intent, patterns in INTENT_PATTERNS.items():
+                for pattern in patterns:
+                    if any(word in query_lower for word in pattern.lower().split()):
+                        if best_score < 0.5:
+                            best_score = 0.5
+                            best_intent = intent
+            return best_intent
+
+        for intent, anchor_phrases in INTENT_PATTERNS.items():
+            scores = embedding_service.compute_similarity(query, anchor_phrases)
+            max_score = max(scores) if scores else 0.0
+            if max_score > best_score:
+                best_score = float(max_score)
                 best_intent = intent
 
-        logger.debug(f"Intent detected: {best_intent} (score={best_score}) for query: {query[:60]}")
+        if best_score < 0.45:
+            best_intent = "unknown"
+
+        logger.debug(f"Intent: {best_intent} (score={best_score:.3f}) | query: {query[:60]}")
         return best_intent
+
+    # ─── Entrée publique ──────────────────────────────────────────────────────
 
     async def process(
         self,
@@ -348,9 +582,6 @@ class HROrchestrator:
         metadata: Optional[Dict[str, Any]] = None,
         thread_id: str = "default",
     ) -> Dict[str, Any]:
-        """
-        Main entry point: process an HR query and return a response.
-        """
         initial_state: HRState = {
             "query": query,
             "intent": "",
@@ -374,49 +605,35 @@ class HROrchestrator:
                     "query": query,
                 }
             except Exception as e:
-                logger.error(f"LangGraph execution failed: {e}, falling back to simple router")
+                logger.error(f"LangGraph error: {e}, falling back to simple router")
 
-        # ── Fallback: simple routing ────────────────────────────────────────
         return await self._simple_route(initial_state)
 
     async def _simple_route(self, state: HRState) -> Dict[str, Any]:
-        """Simple routing without LangGraph."""
         intent = self.detect_intent(state["query"])
+        state["intent"] = intent
+        role = state.get("metadata", {}).get("role", "hr")
+
+        if role == "external":
+            if intent == "privacy_request":
+                return await self._privacy_node(state)
+            return await self._external_node(state)
 
         handlers = {
-            "cv_agent": self._cv_node,
-            "interview_agent": self._interview_node,
-            "onboarding_agent": self._onboarding_node,
-            "training_agent": self._training_node,
-            "payroll_agent": self._payroll_node,
-            "leave_agent": self._leave_node,
-            "recruitment_agent": self._recruitment_node,
-            "segula_agent": self._segula_node,
+            "analyse_cv":      self._cv_node,
+            "plan_interview":  self._interview_node,
+            "find_candidates": self._matching_node,
+            "privacy_request": self._privacy_node,
+            "rh_assistant":    self._rh_assistant_node,
+            "rag_hr":          self._rag_node,
         }
-
-        routing = {
-            "analyse_cv": "cv_agent",
-            "plan_interview": "interview_agent",
-            "employee_onboarding": "onboarding_agent",
-            "training_recommendation": "training_agent",
-            "payroll_question": "payroll_agent",
-            "leave_request": "leave_agent",
-            "find_candidates": "recruitment_agent",
-            "segula_general": "segula_agent",
-        }
-
-        state["intent"] = intent
-        node_name = routing.get(intent, "fallback")
 
         import inspect
-        if node_name in handlers:
-            handler = handlers[node_name]
-            if inspect.iscoroutinefunction(handler):
-                state = await handler(state)
-            else:
-                state = handler(state)
+        handler = handlers.get(intent)
+        if handler:
+            state = await handler(state) if inspect.iscoroutinefunction(handler) else handler(state)
         else:
-            state = self._fallback_node(state)
+            state = await self._fallback_node(state)
 
         return {
             "intent": intent,
@@ -426,5 +643,5 @@ class HROrchestrator:
         }
 
 
-# Module singleton
+# Singleton
 orchestrator = HROrchestrator()

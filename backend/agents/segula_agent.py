@@ -48,6 +48,7 @@ def get_ollama_llm():
             _ollama_llm = Ollama(
                 base_url=settings.OLLAMA_BASE_URL,
                 model=settings.LLM_MODEL,
+                timeout=6000,
             )
             OLLAMA_AVAILABLE = True
             return _ollama_llm

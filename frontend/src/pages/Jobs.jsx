@@ -1,88 +1,37 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Briefcase, MapPin, Users, Target, Search, Filter, Plus, X, FileText, RefreshCw } from 'lucide-react'
+import { Briefcase, MapPin, Users, Target, Search, Plus, X, FileText, RefreshCw } from 'lucide-react'
 import { hrApi } from '../services/api.js'
+import { DEFAULT_JOBS } from '../data/defaultJobs.js'
 import toast from 'react-hot-toast'
 
-// These come from the real offers/ folder in the project
-const REAL_OFFERS = [
-    {
-        id: 101,
-        title: 'Développeur Python',
-        location: 'France',
-        skills: ['Python', 'Django', 'FastAPI', 'PostgreSQL', 'Docker'],
-        experience: '3+ ans',
-        source: 'Python Developer.docx',
-        description: 'Développement et maintenance d\'applications Python. Intégration de microservices. Tests unitaires et CI/CD.',
-    },
-    {
-        id: 102,
-        title: 'Ingénieur Logiciel – Offre 1',
-        location: 'Maroc / Remote',
-        skills: ['Java', 'Spring Boot', 'Microservices', 'Kubernetes'],
-        experience: '2+ ans',
-        source: 'offre.docx',
-        description: 'Conception et développement d\'applications Java dans un environnement Agile/Scrum. Participation aux code reviews.',
-    },
-    {
-        id: 103,
-        title: 'Ingénieur DevOps – Offre 2',
-        location: 'Casablanca, Maroc',
-        skills: ['CI/CD', 'Jenkins', 'Ansible', 'Terraform', 'AWS'],
-        experience: '4+ ans',
-        source: 'offree.docx',
-        description: 'Automatisation des pipelines CI/CD. Gestion de l\'infrastructure cloud. Monitoring et alerting des systèmes.',
-    },
-]
 
-const DEMO_JOBS = [
-    {
-        id: 1,
-        title: 'Senior Python Engineer',
-        location: 'Paris, France',
-        skills: ['Python', 'FastAPI', 'Docker', 'SQL'],
-        experience: '5+ years',
-        source: null,
-        description: 'Work on our core HR platform APIs using FastAPI and Python.',
-    },
-    {
-        id: 2,
-        title: 'Machine Learning Tech Lead',
-        location: 'Remote',
-        skills: ['Python', 'PyTorch', 'MLOps', 'AWS'],
-        experience: '7+ years',
-        source: null,
-        description: 'Lead ML model development and deployment for our AI systems.',
-    },
-    {
-        id: 3,
-        title: 'Frontend Developer (React)',
-        location: 'Lyon, France',
-        skills: ['React', 'JavaScript', 'CSS', 'Redux'],
-        experience: '3+ years',
-        source: null,
-        description: 'Build stunning and responsive UIs for our HR platform.',
-    },
-]
 
 function AddJobModal({ onClose, onAdd }) {
     const [form, setForm] = useState({
         title: '', location: '', skills: '', experience: '', description: '',
     })
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault()
-        onAdd({
-            id: Date.now(),
+        const skillsList = form.skills.split(',').map(s => s.trim()).filter(Boolean)
+        const jobData = {
             title: form.title,
             location: form.location,
-            skills: form.skills.split(',').map(s => s.trim()).filter(Boolean),
-            matched: 0,
-            experience: form.experience,
-            source: null,
             description: form.description,
-        })
-        onClose()
+            criteria: {
+                must_have_skills: skillsList,
+                min_years_experience: parseFloat(form.experience) || 0
+            }
+        }
+        try {
+            await hrApi.createJob(jobData)
+            toast.success("Job Offer Created")
+            onAdd()
+            onClose()
+        } catch(err) {
+            toast.error("Failed to create job")
+        }
     }
 
     return (
@@ -138,11 +87,13 @@ function AddJobModal({ onClose, onAdd }) {
     )
 }
 
-function JobCard({ job, onRefresh }) {
+function JobCard({ job, onRefresh, userRole }) {
     const navigate = useNavigate()
+    const isExternal = userRole === 'external'
     const [stats, setStats] = useState({ matched: 0, aiFit: 0, loading: true })
 
     useEffect(() => {
+        if (isExternal) { setStats({ matched: 0, aiFit: 0, loading: false }); return }
         hrApi.getRanking(50, job.title).then(data => {
             const count = data.candidates.length
             const avg = count > 0 
@@ -156,7 +107,7 @@ function JobCard({ job, onRefresh }) {
         }).catch(() => {
             setStats({ matched: 0, aiFit: 0, loading: false })
         })
-    }, [job.title])
+    }, [job.title, isExternal])
 
     return (
         <div key={job.id} className="card" style={{ display: 'flex', flexDirection: 'column' }}>
@@ -189,50 +140,82 @@ function JobCard({ job, onRefresh }) {
                 {job.skills.map(s => <span key={s} className="badge badge-gray" style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)' }}>{s}</span>)}
             </div>
 
-            {job.experience && (
+            {job.criteria?.min_years_experience > 0 && (
                 <div style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: '0.75rem' }}>
-                    📅 Expérience: <strong style={{ color: 'var(--text-secondary)' }}>{job.experience}</strong>
+                    📅 Expérience: <strong style={{ color: 'var(--text-secondary)' }}>{job.criteria.min_years_experience}+ ans</strong>
                 </div>
             )}
 
-            <div style={{ padding: '0.75rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
-                    <Users size={16} color="var(--color-cyan)" /> {stats.loading ? '...' : stats.matched} Matches
+            {/* Stats – hidden for external users */}
+            {!isExternal && (
+                <div style={{ padding: '0.75rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                        <Users size={16} color="var(--color-cyan)" /> {stats.loading ? '...' : stats.matched} Matches
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                        <Target size={16} color="var(--color-success)" /> AI Fit {stats.loading ? '...' : stats.aiFit}%
+                    </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
-                    <Target size={16} color="var(--color-success)" /> AI Fit {stats.loading ? '...' : stats.aiFit}%
-                </div>
-            </div>
+            )}
 
+            {/* Buttons – external sees only Apply / Contact */}
             <div style={{ marginTop: 'auto', display: 'flex', gap: 8 }}>
-                <button
-                    className="btn btn-primary"
-                    style={{ flex: 1, padding: '8px 0' }}
-                    onClick={() => navigate(`/candidates?job=${encodeURIComponent(job.title)}`)}
-                >
-                    ✅ View Candidates
-                </button>
-                <button 
-                    className="btn btn-secondary" 
-                    style={{ flex: 1, padding: '8px 0' }}
-                    onClick={() => {
-                        toast.success(`Recalculating AI score for ${job.title}...`)
-                        onRefresh()
-                    }}
-                >
-                    📊 AI Score
-                </button>
+                {isExternal ? (
+                    <button
+                        className="btn btn-primary"
+                        style={{ flex: 1, padding: '8px 0' }}
+                        onClick={() => window.open('mailto:rh@segula.fr?subject=Candidature – ' + encodeURIComponent(job.title))}
+                    >
+                        ✉️ Apply for this Position
+                    </button>
+                ) : (
+                    <>
+                        <button
+                            className="btn btn-primary"
+                            style={{ flex: 1, padding: '8px 0' }}
+                            onClick={() => navigate(`/candidates?job=${encodeURIComponent(job.id || job.title)}`)}
+                        >
+                            ✅ View Candidates
+                        </button>
+                        <button 
+                            className="btn btn-secondary" 
+                            style={{ flex: 1, padding: '8px 0' }}
+                            onClick={() => { toast.success(`Recalculating AI score for ${job.title}...`); onRefresh() }}
+                        >
+                            📊 AI Score
+                        </button>
+                    </>
+                )}
             </div>
         </div>
     )
 }
 
 export default function Jobs() {
-    const [jobs, setJobs] = useState([...DEMO_JOBS, ...REAL_OFFERS])
+    const user = JSON.parse(localStorage.getItem('user')) || { role: 'hr' }
+    const isExternal = user.role === 'external'
+    const [jobs, setJobs] = useState([])
     const [search, setSearch] = useState('')
     const [showModal, setShowModal] = useState(false)
     const [refreshTrigger, setRefreshTrigger] = useState(0)
     const [totalCandidates, setTotalCandidates] = useState(0)
+
+    useEffect(() => {
+        hrApi.getJobs().then(data => {
+            if (data.jobs && data.jobs.length > 0) {
+                // Map the DB jobs to the UI format, then merge with defaults (avoiding duplicates)
+                const dbJobs = data.jobs.map(j => ({
+                    ...j,
+                    skills: j.criteria?.must_have_skills || [],
+                }))
+                const dbTitles = new Set(dbJobs.map(j => j.title.toLowerCase()))
+                const extras = DEFAULT_JOBS.filter(j => !dbTitles.has(j.title.toLowerCase()))
+                setJobs([...dbJobs, ...extras])
+            } else {
+                setJobs(DEFAULT_JOBS)
+            }
+        }).catch(() => setJobs(DEFAULT_JOBS))
+    }, [refreshTrigger])
 
     useEffect(() => {
         hrApi.getCandidates(1).then(data => {
@@ -246,8 +229,8 @@ export default function Jobs() {
         j.location.toLowerCase().includes(search.toLowerCase())
     )
 
-    const handleAdd = (newJob) => {
-        setJobs(prev => [...prev, newJob])
+    const handleAdd = () => {
+        setRefreshTrigger(t => t + 1)
     }
 
     return (
@@ -257,19 +240,21 @@ export default function Jobs() {
             <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
                     <h1>Open Job Positions</h1>
-                    <p>Manage and track AI candidate matches for all open roles</p>
+                    <p>{isExternal ? 'Discover our open roles and apply directly' : 'Manage and track AI candidate matches for all open roles'}</p>
                 </div>
-                <div style={{ display: 'flex', gap: 10 }}>
-                    <button className="btn btn-secondary" onClick={() => setRefreshTrigger(t => t + 1)}>
-                        <RefreshCw size={16} /> Refresh Stats
-                    </button>
-                    <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-                        <Plus size={16} /> Add Position
-                    </button>
-                </div>
+                {!isExternal && (
+                    <div style={{ display: 'flex', gap: 10 }}>
+                        <button className="btn btn-secondary" onClick={() => setRefreshTrigger(t => t + 1)}>
+                            <RefreshCw size={16} /> Refresh Stats
+                        </button>
+                        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+                            <Plus size={16} /> Add Position
+                        </button>
+                    </div>
+                )}
             </div>
 
-            {totalCandidates === 0 && (
+            {totalCandidates === 0 && !isExternal && (
                 <div className="card" style={{ marginBottom: '2rem', background: 'rgba(245,158,11,0.05)', borderColor: 'rgba(245,158,11,0.2)', borderLeft: '4px solid #f59e0b', display: 'flex', alignItems: 'center', gap: 16 }}>
                     <div style={{ fontSize: 24 }}>💡</div>
                     <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
@@ -301,7 +286,7 @@ export default function Jobs() {
             {/* Job Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
                 {filteredJobs.map(job => (
-                    <JobCard key={`${job.id}-${refreshTrigger}`} job={job} onRefresh={() => setRefreshTrigger(t => t + 1)} />
+                    <JobCard key={`${job.id}-${refreshTrigger}`} job={job} onRefresh={() => setRefreshTrigger(t => t + 1)} userRole={user.role} />
                 ))}
             </div>
         </div>

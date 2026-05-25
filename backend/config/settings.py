@@ -10,8 +10,8 @@ import os
 
 class Settings(BaseSettings):
     # ─── App ──────────────────────────────────────────────────────────────────
-    APP_NAME: str = "HR Multi-Agent Platform"
-    APP_VERSION: str = "1.0.0"
+    APP_NAME: str = "Smart Recruitment Platform – AI-Powered"
+    APP_VERSION: str = "2.0.0"
     DEBUG: bool = False
     SECRET_KEY: str = "change-me-in-production-super-secret-key-32chars"
 
@@ -55,6 +55,15 @@ class Settings(BaseSettings):
 
     # ─── GitHub ───────────────────────────────────────────────────────────────
     GITHUB_TOKEN: Optional[str] = None
+
+    # ─── Langfuse (Observabilité & Tracing IA) ────────────────────────────────
+    LANGFUSE_SECRET_KEY: Optional[str] = None
+    LANGFUSE_PUBLIC_KEY: Optional[str] = None
+    LANGFUSE_HOST: str = "https://cloud.langfuse.com"
+
+    # ─── Privacy / RGPD ───────────────────────────────────────────────────────
+    DATA_RETENTION_HOURS: int = 72      # Durée avant suppression automatique des PII
+    ANONYMIZE_BEFORE_LLM: bool = True   # Anonymiser les données avant envoi au LLM
 
     # ─── CORS ─────────────────────────────────────────────────────────────────
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:5173"]

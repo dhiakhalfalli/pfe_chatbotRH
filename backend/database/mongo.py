@@ -37,27 +37,29 @@ class InMemoryStore:
         return InMemoryCollection(self._data[name])
 
 
-class InMemoryCollection:
-    def __init__(self, data: List[Dict[str, Any]]):
+class InMemoryCursor:
+    def __init__(self, data: List[Dict[str, Any]], query: Dict[str, Any] = None):
         self._data = data
+        self._query = query or {}
+        self._sort_key = None
+        self._sort_desc = False
+        self._limit = None
+        self._skip = 0
 
-    async def insert_one(self, doc: Dict[str, Any]) -> Any:
-        self._data.append(doc)
+    def sort(self, key: str, direction: int = -1):
+        self._sort_key = key
+        self._sort_desc = (direction == -1)
+        return self
 
-        class Result:
-            inserted_id = doc.get("id", str(len(self._data)))
-        return Result()
+    def limit(self, n: int):
+        self._limit = n
+        return self
 
-    async def find_one(self, query: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-        for doc in self._data:
-            if all(doc.get(k) == v for k, v in query.items()):
-                return doc
-        return None
+    def skip(self, n: int):
+        self._skip = n
+        return self
 
-    async def find(self, query: Dict[str, Any] = None) -> List[Dict[str, Any]]:
-        if not query:
-            return list(self._data)
-        
+    def _get_results(self) -> List[Dict[str, Any]]:
         import re
 
         def matches_val(doc_val, query_val):
@@ -85,7 +87,6 @@ class InMemoryCollection:
             curr = doc
             for i, p in enumerate(parts):
                 if isinstance(curr, list):
-                    # For list of dicts, collect all values for the remaining key
                     remaining = ".".join(parts[i:])
                     results = []
                     for item in curr:
@@ -114,8 +115,50 @@ class InMemoryCollection:
                         return False
             return True
 
-        results = [doc for doc in self._data if matches_query(doc, query)]
-        return results
+        results = [doc for doc in self._data if matches_query(doc, self._query)]
+
+        # Apply sort
+        if self._sort_key:
+            results.sort(
+                key=lambda x: x.get(self._sort_key) if x.get(self._sort_key) is not None else "",
+                reverse=self._sort_desc
+            )
+
+        # Apply skip & limit
+        start = self._skip
+        end = (start + self._limit) if self._limit is not None else None
+        return results[start:end]
+
+    def __await__(self):
+        async def _exec():
+            return self._get_results()
+        return _exec().__await__()
+
+    async def to_list(self, length: int = None) -> List[Dict[str, Any]]:
+        if length is not None:
+            self._limit = length
+        return self._get_results()
+
+
+class InMemoryCollection:
+    def __init__(self, data: List[Dict[str, Any]]):
+        self._data = data
+
+    async def insert_one(self, doc: Dict[str, Any]) -> Any:
+        self._data.append(doc)
+
+        class Result:
+            inserted_id = doc.get("id", str(len(self._data)))
+        return Result()
+
+    async def find_one(self, query: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        for doc in self._data:
+            if all(doc.get(k) == v for k, v in query.items()):
+                return doc
+        return None
+
+    def find(self, query: Dict[str, Any] = None) -> InMemoryCursor:
+        return InMemoryCursor(self._data, query)
 
     async def update_one(self, query: Dict[str, Any], update: Dict[str, Any]) -> None:
         set_data = update.get("$set", {})
@@ -123,6 +166,12 @@ class InMemoryCollection:
             if all(doc.get(k) == v for k, v in query.items()):
                 doc.update(set_data)
                 return
+
+    async def update_many(self, query: Dict[str, Any], update: Dict[str, Any]) -> None:
+        set_data = update.get("$set", {})
+        for doc in self._data:
+            if all(doc.get(k) == v for k, v in query.items()):
+                doc.update(set_data)
 
     async def count_documents(self, query: Dict[str, Any] = None) -> int:
         if not query:
@@ -134,21 +183,6 @@ class InMemoryCollection:
             if all(doc.get(k) == v for k, v in query.items()):
                 self._data.pop(i)
                 return
-
-    def sort(self, *args, **kwargs):
-        return self
-
-    def limit(self, n: int):
-        return self
-
-    def skip(self, n: int):
-        return self
-
-    def to_list(self, length: int = None):
-        import asyncio
-        async def _get():
-            return list(self._data[:length] if length else self._data)
-        return _get()
 
 
 class MongoDB:
@@ -236,34 +270,67 @@ class MongoDB:
         await col.insert_one(score_data)
 
     @classmethod
-    async def get_ranked_candidates(cls, limit: int = 50, job_title: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def get_ranked_candidates(cls, limit: int = 50, job_id: Optional[str] = None) -> List[Dict[str, Any]]:
         col = cls.get_collection("candidates")
         
-        # Initial query for candidates with a score
-        query = {"score": {"$exists": True}}
+        if not job_id:
+            # If no job_id is provided, just return candidates (maybe we shouldn't rank if no job given, but keep backward compat)
+            docs = await col.find({}).to_list(length=limit) if not cls._use_memory else await col.find({})
+            return docs
+            
+        # We need candidates who have an offer_evaluation for this job_id
+        query = {"offer_evaluations.job_id": job_id}
         
-        if job_title:
-            # Multi-word matching: split title into keywords (e.g. "Senior Python" -> ["Senior", "Python"])
-            keywords = [k.strip() for k in job_title.split() if len(k.strip()) > 2]
-            if not keywords:
-                keywords = [job_title]
-                
-            match_conditions = []
-            for kw in keywords:
-                match_conditions.extend([
-                    {"job_title_applied": {"$regex": kw, "$options": "i"}},
-                    {"skills.name": {"$regex": kw, "$options": "i"}},
-                    {"summary": {"$regex": kw, "$options": "i"}}
-                ])
-            query["$or"] = match_conditions
-
         if cls._use_memory:
             docs = await col.find(query)
-            # Sort by total_score descending
-            docs.sort(key=lambda x: x.get("score", {}).get("total_score", 0), reverse=True)
+            def get_job_score(c):
+                evs = c.get("offer_evaluations", [])
+                for ev in evs:
+                    if ev.get("job_id") == job_id:
+                        return ev.get("score", 0)
+                return 0
+            docs.sort(key=get_job_score, reverse=True)
             return docs[:limit]
 
-        cursor = col.find(query).sort("score.total_score", -1).limit(limit)
+        cursor = col.find(query)
+        docs = await cursor.to_list(length=1000)
+        
+        # Sort in python since we need to extract from array
+        def get_job_score(c):
+            evs = c.get("offer_evaluations", [])
+            for ev in evs:
+                if ev.get("job_id") == job_id:
+                    return ev.get("score", 0)
+            return 0
+            
+        docs.sort(key=get_job_score, reverse=True)
+        return docs[:limit]
+
+    @classmethod
+    async def insert_job_offer(cls, job_offer: Dict[str, Any]) -> str:
+        col = cls.get_collection("job_offers")
+        job_offer["created_at"] = datetime.utcnow().isoformat()
+        result = await col.insert_one(job_offer)
+        return str(result.inserted_id)
+
+    @classmethod
+    async def get_job_offer(cls, offer_id: str) -> Optional[Dict[str, Any]]:
+        col = cls.get_collection("job_offers")
+        return await col.find_one({"id": offer_id})
+
+    @classmethod
+    async def update_job_offer(cls, offer_id: str, update_data: Dict[str, Any]) -> None:
+        col = cls.get_collection("job_offers")
+        update_data["updated_at"] = datetime.utcnow().isoformat()
+        await col.update_one({"id": offer_id}, {"$set": update_data})
+
+    @classmethod
+    async def list_job_offers(cls, limit: int = 100, skip: int = 0) -> List[Dict[str, Any]]:
+        col = cls.get_collection("job_offers")
+        if cls._use_memory:
+            docs = await col.find({})
+            return docs[skip: skip + limit]
+        cursor = col.find({}).sort("created_at", -1).skip(skip).limit(limit)
         return await cursor.to_list(length=limit)
 
 

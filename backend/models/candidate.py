@@ -103,6 +103,7 @@ class CandidateProfile(CandidateCreate):
     cv_file_path: Optional[str] = None
     github_profile: Optional[GitHubProfile] = None
     score: Optional[CandidateScore] = None
+    offer_evaluations: List[Dict[str, Any]] = Field(default_factory=list, description="List of LLM evaluations specific to Job Offers")
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     tags: List[str] = Field(default_factory=list)

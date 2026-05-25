@@ -1,0 +1,71 @@
+<svg width="850" height="750" viewBox="0 0 850 750" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#ffffff" />
+  
+  <style>
+    .box { fill: #fdfdfd; stroke: #2c3e50; stroke-width: 2; rx: 10px; }
+    .text-title { font-family: Arial, sans-serif; font-size: 20px; font-weight: bold; text-anchor: middle; fill: #2c3e50; }
+    .text-sub { font-family: Arial, sans-serif; font-size: 16px; text-anchor: middle; fill: #7f8c8d; }
+    .line { stroke: #34495e; stroke-width: 2; fill: none; }
+    .security-box { fill: #fcfcfc; stroke: #e74c3c; stroke-width: 2; rx: 10px; stroke-dasharray: 5,5; }
+  </style>
+
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="7" refX="9" refY="3.5" orient="auto">
+      <polygon points="0 0, 10 3.5, 0 7" fill="#34495e" />
+    </marker>
+  </defs>
+
+  <!-- Utilisateur -->
+  <g transform="translate(150, 70)">
+    <circle cx="0" cy="-20" r="15" fill="none" stroke="#2c3e50" stroke-width="2" />
+    <path d="M-25,15 C-25,0 -12,-5 0,-5 C12,-5 25,0 25,15" fill="none" stroke="#2c3e50" stroke-width="2" />
+    <text x="0" y="45" class="text-title">User</text>
+  </g>
+
+  <!-- Frontend -->
+  <rect x="250" y="20" width="300" height="100" class="box" />
+  <text x="400" y="60" class="text-title">Frontend ReactJS</text>
+  <text x="400" y="90" class="text-sub">(Interface Utilisateur)</text>
+
+  <!-- Flèche Frontend -> Backend -->
+  <line x1="400" y1="120" x2="400" y2="155" class="line" marker-end="url(#arrowhead)" />
+
+  <!-- Backend -->
+  <rect x="250" y="160" width="300" height="110" class="box" />
+  <text x="400" y="200" class="text-title">Backend FastAPI</text>
+  <text x="400" y="230" class="text-sub">Orchestrateur LangGraph</text>
+  <text x="400" y="255" class="text-sub">Système Multi-Agent</text>
+
+  <!-- Ligne horizontale de distribution -->
+  <line x1="400" y1="270" x2="400" y2="300" class="line" />
+  <line x1="120" y1="300" x2="680" y2="300" class="line" />
+
+  <!-- BDD -->
+  <line x1="120" y1="300" x2="120" y2="335" class="line" marker-end="url(#arrowhead)" />
+  <rect x="20" y="340" width="200" height="100" class="box" />
+  <text x="120" y="385" class="text-title">Bases de Données</text>
+  <text x="120" y="415" class="text-sub">SQLite &amp; MongoDB</text>
+
+  <!-- FAISS -->
+  <line x1="400" y1="300" x2="400" y2="335" class="line" marker-end="url(#arrowhead)" />
+  <rect x="280" y="340" width="240" height="100" class="box" />
+  <text x="400" y="380" class="text-sub">Indexation RAG</text>
+  <text x="400" y="415" class="text-title" font-size="24">Vector Store FAISS</text>
+
+  <!-- LLM -->
+  <line x1="680" y1="300" x2="680" y2="335" class="line" marker-end="url(#arrowhead)" />
+  <rect x="560" y="340" width="240" height="100" class="box" />
+  <text x="680" y="385" class="text-title">Modèles LLM</text>
+  <text x="680" y="415" class="text-sub">Groq (Cloud) / Ollama (Local)</text>
+
+  <!-- Flèche sécurité -->
+  <line x1="400" y1="440" x2="400" y2="485" class="line" marker-end="url(#arrowhead)" />
+
+  <!-- Sécurité et Confidentialité -->
+  <rect x="150" y="490" width="500" height="150" class="security-box" />
+  <text x="400" y="530" class="text-title" fill="#e74c3c">Zone de Sécurité &amp; RGPD</text>
+  <text x="400" y="570" class="text-sub">— Authentification API (JWT)</text>
+  <text x="400" y="600" class="text-sub">— Traitement Local (Ollama)</text>
+  <text x="400" y="625" class="text-sub">— Aucune fuite de données RH</text>
+
+</svg>

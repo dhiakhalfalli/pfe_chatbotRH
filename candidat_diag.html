@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <style>
+        body { background-color: white; margin: 0; padding: 20px; font-family: sans-serif; }
+        .mermaid { background: white; }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center; color: #2c3e50;">Diagramme de Séquence : Parcours Candidat</h1>
+    <div class="mermaid">
+sequenceDiagram
+    participant C as Candidat
+    participant UI as Interface UI
+    participant G as API Gateway
+    participant A as Agent IA (Analyse)
+    participant DB as MongoDB
+
+    C->>UI: Déposer CV
+    UI->>G: POST /upload_cv
+    G->>A: cv_agent.process_cv()
+    activate A
+    A->>A: Extraction & Scoring
+    A->>DB: Sauvegarder Profil
+    DB-->>A: Confirmation
+    A-->>G: Retourne Score
+    deactivate A
+    G-->>UI: Confirmation & Données
+    UI-->>C: Affiche le Score de Qualité
+    </div>
+</body>
+</html>

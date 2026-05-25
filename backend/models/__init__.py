@@ -3,19 +3,11 @@ from .candidate import (
     CandidateRanking, CVDocument, Skill, Education, Experience,
     GitHubProfile, CandidateStatus, SkillLevel
 )
-from .employee import (
-    EmployeeProfile, EmployeeCreate, LeaveRequest, LeaveRequestCreate,
-    PayrollRecord, TrainingProgram, TrainingRecommendation,
-    OnboardingPlan, OnboardingTask, InterviewPlan, InterviewQuestion,
-    EmploymentType, LeaveType, LeaveStatus, TrainingStatus
-)
+from .job_offer import JobOfferCreate
 
 __all__ = [
     "CandidateProfile", "CandidateCreate", "CandidateScore",
     "CandidateRanking", "CVDocument", "Skill", "Education", "Experience",
     "GitHubProfile", "CandidateStatus", "SkillLevel",
-    "EmployeeProfile", "EmployeeCreate", "LeaveRequest", "LeaveRequestCreate",
-    "PayrollRecord", "TrainingProgram", "TrainingRecommendation",
-    "OnboardingPlan", "OnboardingTask", "InterviewPlan", "InterviewQuestion",
-    "EmploymentType", "LeaveType", "LeaveStatus", "TrainingStatus",
+    "JobOfferCreate",
 ]

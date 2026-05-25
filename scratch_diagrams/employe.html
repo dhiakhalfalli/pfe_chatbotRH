@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+    <style>
+        body { background-color: white; display: flex; justify-content: center; padding: 50px; }
+        #diagram { width: fit-content; }
+    </style>
+</head>
+<body>
+    <div id="diagram" class="mermaid">
+sequenceDiagram
+    participant EMP as Employé
+    participant UI as Portail Employé
+    participant G as API Gateway
+    participant LA as Leave Agent
+    participant DB as SQL Database
+
+    EMP->>UI: Soumet Demande de Congé
+    UI->>G: POST /leave_request
+    G->>LA: handle_request(action="submit")
+    activate LA
+    LA->>DB: Vérifie le solde (MySQL)
+    DB-->>LA: Solde OK
+    LA->>DB: Enregistre la demande
+    DB-->>LA: Succès
+    LA-->>G: Statut "En attente d'approbation"
+    deactivate LA
+    G-->>UI: Confirmation de Soumission
+    UI-->>EMP: Message "Demande enregistrée"
+    </div>
+</body>
+</html>

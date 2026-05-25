@@ -1,0 +1,20 @@
+%%{init: { 'theme': 'base', 'themeVariables': { 'background': '#ffffff', 'primaryColor': '#ffffff', 'primaryTextColor': '#000000', 'primaryBorderColor': '#000000', 'lineColor': '#000000', 'secondaryColor': '#ffffff', 'tertiaryColor': '#ffffff', 'noteBkgColor': '#ffffff', 'noteTextColor': '#000000', 'noteBorderColor': '#000000', 'actorBkg': '#ffffff', 'actorBorder': '#000000', 'actorTextColor': '#000000', 'actorLineColor': '#000000', 'signalColor': '#000000', 'signalTextColor': '#000000', 'activationBkgColor': '#ffffff', 'activationBorderColor': '#000000' } }}%%
+sequenceDiagram
+    participant EMP as Employé
+    participant UI as Portail Employé
+    participant G as API Gateway
+    participant LA as Leave Agent
+    participant DB as SQL Database
+
+    EMP->>UI: Soumet Demande de Congé
+    UI->>G: POST /leave_request
+    G->>LA: handle_request(action="submit")
+    activate LA
+    LA->>DB: Vérifie le solde (MySQL)
+    DB-->>LA: Solde OK
+    LA->>DB: Enregistre la demande
+    DB-->>LA: Succès
+    LA-->>G: Statut "En attente"
+    deactivate LA
+    G-->>UI: Confirmation de Soumission
+    UI-->>EMP: Message de confirmation

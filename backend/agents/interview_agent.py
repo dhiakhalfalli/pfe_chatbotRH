@@ -1,17 +1,21 @@
 """
-Interview Agent: Generates interview questions, schedules interviews,
-and provides structured evaluation guidance.
+Interview Agent: Generates interview questions using LLM (Groq/Ollama),
+schedules interviews, and provides structured evaluation guidance.
+Falls back to a static question bank when no LLM is available.
 """
 import logging
+import json
+import re
 from typing import Dict, Any, List, Optional
 from datetime import datetime, timedelta
 
 logger = logging.getLogger(__name__)
 
-from backend.tools.calendar_tool import calendar_tool
+from backend.services.llm_service import generate_response
 
 
-# Question bank organized by category and skill
+# ── Static question bank (fallback when LLM is unavailable) ───────────────────
+
 QUESTION_BANK: Dict[str, List[Dict[str, Any]]] = {
     "behavioral": [
         {
@@ -33,60 +37,6 @@ QUESTION_BANK: Dict[str, List[Dict[str, Any]]] = {
             "hints": "Look for prioritization, time management, and delivery.",
         },
     ],
-    "leadership": [
-        {
-            "question": "Describe your experience leading a team. What was the biggest challenge?",
-            "category": "leadership",
-            "difficulty": "hard",
-            "hints": "Assess team management, decision-making, and mentorship.",
-        },
-        {
-            "question": "How do you handle disagreements with your manager?",
-            "category": "leadership",
-            "difficulty": "medium",
-            "hints": "Look for professionalism and constructive communication.",
-        },
-    ],
-    "python": [
-        {
-            "question": "Explain the difference between `*args` and `**kwargs` in Python.",
-            "category": "technical",
-            "difficulty": "easy",
-            "hints": "args: positional tuple, kwargs: keyword dict.",
-        },
-        {
-            "question": "What are Python decorators and how do you use them?",
-            "category": "technical",
-            "difficulty": "medium",
-            "hints": "Higher-order functions, @syntax, closures.",
-        },
-        {
-            "question": "Explain the GIL and how async/await helps work around it.",
-            "category": "technical",
-            "difficulty": "hard",
-            "hints": "GIL blocking threads, asyncio cooperates.",
-        },
-    ],
-    "machine_learning": [
-        {
-            "question": "What is the difference between supervised and unsupervised learning?",
-            "category": "technical",
-            "difficulty": "easy",
-            "hints": "Labeled vs unlabeled data, specific tasks.",
-        },
-        {
-            "question": "Explain overfitting and how to prevent it.",
-            "category": "technical",
-            "difficulty": "medium",
-            "hints": "Regularization, dropout, cross-validation, more data.",
-        },
-        {
-            "question": "How does attention mechanism work in transformer models?",
-            "category": "technical",
-            "difficulty": "hard",
-            "hints": "Q, K, V matrices, scaled dot-product, multi-head.",
-        },
-    ],
     "general": [
         {
             "question": "Why are you interested in this position?",
@@ -100,19 +50,14 @@ QUESTION_BANK: Dict[str, List[Dict[str, Any]]] = {
             "difficulty": "easy",
             "hints": "Assess ambition, growth mindset, and commitment.",
         },
-        {
-            "question": "What are your greatest strengths and one area for improvement?",
-            "category": "motivational",
-            "difficulty": "easy",
-            "hints": "Self-awareness and growth mindset.",
-        },
     ],
 }
 
 
 class InterviewAgent:
     """
-    Generates customized interview question sets and manages scheduling.
+    Generates customized interview question sets using LLM.
+    Falls back to static question bank when LLM is unavailable.
     """
 
     def generate_questions(
@@ -122,49 +67,154 @@ class InterviewAgent:
         job_title: str = "",
         experience_years: float = 0,
         num_questions: int = 10,
+        candidate_name: str = "",
+        candidate_summary: str = "",
     ) -> Dict[str, Any]:
         """
         Generate a tailored set of interview questions based on candidate profile.
+        Uses LLM for intelligent generation, falls back to static bank.
         """
-        logger.info(f"Generating interview questions for candidate {candidate_id}")
+        logger.info(f"Generating interview questions for candidate {candidate_id}, job: {job_title}")
 
+        # ── Try LLM-based generation first ────────────────────────────────────
+        llm_result = self._generate_with_llm(
+            skills=skills,
+            job_title=job_title,
+            experience_years=experience_years,
+            num_questions=num_questions,
+            candidate_name=candidate_name,
+            candidate_summary=candidate_summary,
+        )
+
+        if llm_result:
+            llm_result["candidate_id"] = candidate_id
+            return llm_result
+
+        # ── Fallback: static question bank ────────────────────────────────────
+        logger.warning("LLM unavailable, using static question bank fallback")
+        return self._generate_static(candidate_id, skills, job_title, experience_years, num_questions)
+
+    def _generate_with_llm(
+        self,
+        skills: List[str],
+        job_title: str,
+        experience_years: float,
+        num_questions: int,
+        candidate_name: str = "",
+        candidate_summary: str = "",
+    ) -> Optional[Dict[str, Any]]:
+        """Generate questions using LLM (Groq or Ollama)."""
+
+        difficulty_level = "junior" if experience_years < 2 else ("mid-level" if experience_years < 5 else "senior")
+        skills_str = ", ".join(skills) if skills else "non spécifié"
+        title = job_title or "Software Engineer"
+
+        system_prompt = (
+            "You are an expert HR interviewer and technical recruiter. "
+            "You generate high-quality, targeted interview questions for specific positions. "
+            "Your questions must be directly relevant to the job title, required skills, and candidate experience level. "
+            "Always respond in valid JSON format. Never include any text outside the JSON."
+        )
+
+        candidate_context = ""
+        if candidate_name:
+            candidate_context += f"\n- Candidate name: {candidate_name}"
+        if candidate_summary:
+            candidate_context += f"\n- Candidate summary: {candidate_summary}"
+
+        user_prompt = f"""Generate exactly {num_questions} interview questions for this position:
+
+- Job title: {title}
+- Required skills: {skills_str}
+- Experience level: {difficulty_level} ({experience_years:.0f} years)
+{candidate_context}
+
+Requirements:
+1. Include 2-3 behavioral/soft-skill questions
+2. Include {num_questions - 3} technical questions SPECIFIC to the skills listed above
+3. Questions must be appropriate for the experience level
+4. Each question must have a category, difficulty, and evaluation hints
+5. Technical questions should test real practical knowledge, not just theory
+6. DO NOT include generic questions like "What are your strengths?" — focus on role-specific questions
+
+Respond ONLY with this JSON format (no other text):
+{{
+  "job_title": "{title}",
+  "total_questions": {num_questions},
+  "questions": [
+    {{
+      "question": "Your specific question here",
+      "category": "technical|behavioral|situational|system_design",
+      "difficulty": "easy|medium|hard",
+      "hints": "What the interviewer should look for in the answer"
+    }}
+  ],
+  "instructions": "Interview plan summary in one line",
+  "evaluation_criteria": ["criterion 1", "criterion 2", "criterion 3", "criterion 4", "criterion 5"]
+}}"""
+
+        try:
+            response = generate_response(system_prompt, user_prompt)
+            if not response:
+                return None
+
+            # Parse JSON from LLM response
+            result = self._parse_llm_json(response)
+            if result and "questions" in result:
+                logger.info(f"LLM generated {len(result['questions'])} interview questions for {title}")
+                return result
+
+            logger.warning("LLM response could not be parsed as valid JSON")
+            return None
+
+        except Exception as e:
+            logger.error(f"LLM interview generation failed: {e}")
+            return None
+
+    @staticmethod
+    def _parse_llm_json(text: str) -> Optional[Dict[str, Any]]:
+        """Extract and parse JSON from LLM response, handling markdown code blocks."""
+        # Try direct parse first
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            pass
+
+        # Try extracting from markdown code block
+        json_match = re.search(r"```(?:json)?\s*\n?(.*?)\n?```", text, re.DOTALL)
+        if json_match:
+            try:
+                return json.loads(json_match.group(1))
+            except json.JSONDecodeError:
+                pass
+
+        # Try finding first { to last }
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+
+        return None
+
+    def _generate_static(
+        self,
+        candidate_id: str,
+        skills: List[str],
+        job_title: str,
+        experience_years: float,
+        num_questions: int,
+    ) -> Dict[str, Any]:
+        """Fallback: pick from the static question bank."""
         questions: List[Dict[str, Any]] = []
-        skills_lower = [s.lower() for s in skills]
 
-        # Always include behavioral questions
-        questions.extend(
-            self._pick_questions("behavioral", 2)
-        )
+        # Behavioral
+        questions.extend(self._pick_questions("behavioral", 2))
 
-        # Add general/motivational
-        questions.extend(
-            self._pick_questions("general", 2)
-        )
-
-        # Add skill-specific technical questions
-        tech_added = 0
-        target_tech = num_questions - 4  # Remaining slots for technical
-
-        for skill_key in QUESTION_BANK:
-            if tech_added >= target_tech:
-                break
-            # Match skill keywords to question bank categories
-            if any(skill_key in s or s in skill_key for s in skills_lower):
-                skill_qs = self._pick_questions(
-                    skill_key,
-                    min(3, target_tech - tech_added),
-                    difficulty=self._map_difficulty(experience_years)
-                )
-                questions.extend(skill_qs)
-                tech_added += len(skill_qs)
-
-        # Fill remaining with ML/Python if not enough
-        if len(questions) < num_questions:
-            for fallback in ["python", "machine_learning", "leadership"]:
-                remaining = num_questions - len(questions)
-                if remaining <= 0:
-                    break
-                questions.extend(self._pick_questions(fallback, remaining))
+        # General/motivational
+        questions.extend(self._pick_questions("general", 2))
 
         questions = questions[:num_questions]
 
@@ -187,40 +237,7 @@ class InterviewAgent:
             ],
         }
 
-    def schedule(
-        self,
-        candidate_id: str,
-        candidate_name: str,
-        interviewer: str,
-        preferred_date: Optional[datetime] = None,
-        duration_minutes: int = 60,
-        format_type: str = "video",
-    ) -> Dict[str, Any]:
-        """Schedule an interview and return event details."""
-        if preferred_date is None:
-            # Default to next business day at 10 AM
-            now = datetime.now()
-            days_ahead = 1
-            if now.weekday() >= 4:  # Friday = 4
-                days_ahead = 7 - now.weekday()
-            preferred_date = now.replace(hour=10, minute=0, second=0, microsecond=0) + timedelta(days=days_ahead)
-
-        event = calendar_tool.schedule_interview(
-            candidate_id=candidate_id,
-            candidate_name=candidate_name,
-            interviewer=interviewer,
-            scheduled_at=preferred_date,
-            duration_minutes=duration_minutes,
-            format_type=format_type,
-        )
-
-        return {
-            "event": event,
-            "confirmation": f"✅ Interview scheduled for {candidate_name} on {preferred_date.strftime('%A, %B %d %Y at %H:%M')}",
-            "format": format_type,
-            "duration": f"{duration_minutes} minutes",
-            "interviewer": interviewer,
-        }
+    # Note: La planification d'entretien est gérée via l'interface utilisateur.
 
     def _pick_questions(
         self,

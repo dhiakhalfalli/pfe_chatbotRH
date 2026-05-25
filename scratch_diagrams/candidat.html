@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script>
+        mermaid.initialize({
+            startOnLoad: true,
+            theme: 'default',
+            sequence: {
+                showSequenceNumbers: true,
+                actorMargin: 50,
+                margin: 50,
+                width: 150,
+                height: 65,
+                boxMargin: 10,
+                boxTextMargin: 5,
+                noteMargin: 10,
+                messageMargin: 35,
+                mirrorActors: true,
+                forceMenus: true,
+                useMaxWidth: false
+            }
+        });
+    </script>
+    <style>
+        body { background-color: white; display: flex; justify-content: center; align-items: flex-start; padding: 50px; }
+        #diagram { width: fit-content; }
+    </style>
+</head>
+<body>
+    <div id="diagram" class="mermaid">
+sequenceDiagram
+    participant C as Candidat
+    participant UI as Interface UI
+    participant G as API Gateway
+    participant A as CV Agent (IA)
+    participant DB as MongoDB
+
+    C->>UI: Dépose son CV
+    UI->>G: POST /upload_cv (File)
+    G->>A: cv_agent.process_cv()
+    activate A
+    A->>A: Analyse Sémantique & Scoring
+    A->>DB: Sauvegarder le profil
+    DB-->>A: Confirmation
+    A-->>G: Retourne Score Initial
+    deactivate A
+    G-->>UI: Succès & Données Candidat
+    UI-->>C: Affiche Score de Qualité
+    </div>
+</body>
+</html>
